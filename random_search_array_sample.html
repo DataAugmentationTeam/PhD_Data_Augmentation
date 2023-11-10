@@ -1,0 +1,186 @@
+<pre>
+---
+title: "Generating random model parameters and train:validation:test dataset split"
+format:
+  html:
+    code-fold: true
+jupyter: python3
+---
+ 
+Date: 03/11/23
+
+## GOHREP
+**Goal:**
+
+Generate excel tables containing a series of randomly sampled model hyperparameters for random search hyperparameter tuning.
+
+Load in the CDA dataset and split it into training, validation, and hold-out test datasets.
+
+**Hypothesis:**
+
+N/A
+
+**Rationale:**
+
+N/A
+
+**Experimental plan:**
+
+N/A
+
+### Import required libraries
+```{python}
+import numpy as np # Numpy contains lots of maths related functions, as well as datatypes such as the numpy array.
+import pandas as pd # Pandas is great for data manipulation and I mostly use it for the pandas dataframes.
+from sklearn.model_selection import ParameterGrid # scikit-learn (sklearn) is a machine learning framework.
+import random # I use the random package for random sampling.
+from typing import Any, List, Tuple # I use the typing package for assigning types to my function parameters - this means if we try to give a function e.g. a string instead of an integer by mistake it will give an error.
+import os # This os package relates to the operating system and I mostly use it for reading from and writing to files.
+import cv2 as cv # This is an important image manipulation library (I mentioned it as OpenCV).
+from sklearn.utils import shuffle # This is just another scikit-learn function.
+import argparse # This is for using command line arguments.
+```
+
+### Command line arguments which to be used when running this script on the cluster.
+
+There are two command line arguments. --arraylen defines the number of scripts to be run in parallel on the cluster, and --perfile defines the number of models to be run in each of those scripts. For example, if --arraylen == 5 and --perfile == 4, then we will train 5*4=20 models.
+
+```{python}
+parser = argparse.ArgumentParser(add_help=True, formatter_class=argparse.RawDescriptionHelpFormatter, description = "random_search_array_sample")
+parser.add_argument("-a", "--arraylen", help="number of csv files", type=int, default=None)
+parser.add_argument("-p", "--perfile", help="number of sets per csv", type=int, default=None)
+args = parser.parse_args()
+arraylen, perfile = args.arraylen, args.perfile
+```
+
+### Defining a parameter grid to sample from
+
+Here I'm looking to define all the possible hyperparameters that my models can take, and I'll sample randomly from these parameters when I'm searching for the best models.
+
+If you're interested in what each of these parameters mean, this paper is a good review: https://arxiv.org/abs/2003.05689
+
+For this hyperparameter grid below, total number of possible convolutions is 6x1x4x1x1x4x1x1x1x3x3x1=864, so if we wanted to train all possible combinations we could use --arraylen 96 and --perfile 9, since 96x9=864
+
+```{python}
+param_grid = {
+    'num_filters': [2, 4, 8, 16, 32, 64],
+    'filter_size': [3],
+    'learning_rate': [0.01, 0.001, 0.0001, 0.00001],
+    'epochs': [50],
+    'k': [5],
+    'num_layers': [1, 2, 3, 4],
+    'pooling_size': [2],
+    'activation_function': ['relu'],
+    'batch_size': [64],
+    'reg': [None, "L1", "L2"],
+    'opt': ["Adam", "Momentum", "RMSProp"],
+    'dropout': [0]
+}
+
+grid = list(ParameterGrid(param_grid))
+random.shuffle(grid) # I randomly shuffle the order of the hyperparameter sets here so I can just loop through them when I'm sampling.
+```
+
+### Create --arraylen CSV files of --perfile sampled hyperparameter sets.
+```{python}
+dfs = [] # This will contain each of the DataFrames containing the randomly sampled hyperparameter sets.
+
+
+# For each csv file, add --perfile hyperparameter sets.
+for csv in range(arraylen):
+    random_samples = []
+    for sample in range(perfile):
+        random_sample = grid.pop()
+        print(len(grid))
+        random_samples.append(random_sample)
+    output_df = pd.DataFrame(random_samples)
+    dfs.append(output_df)
+
+# Output each of these DataFrames with an ID number in their filename.
+for df_index, df in enumerate(dfs):
+    if not df.empty:
+        df.to_csv(f"random_samples{df_index + 1}.csv", index=False)
+```
+
+
+### In the second part here, we will generate the training, validation, and hold-out test datasets.
+
+### First, we need to load in all the CDA images that have been created
+```{python}
+def load_images_and_labels() -> Tuple[List[Any], List[int]]:
+    data_dir = "../../data/images_combined/" # Relative path to the folders containing the CDAs
+    class_labels = os.listdir(data_dir)
+    class_labels = [label for label in class_labels if label != '.DS_Store'] # Remove .DS_Store
+
+    images = []
+    labels = []
+    test_ids = []
+
+    for label_idx, class_label in enumerate(class_labels):
+        class_dir = os.path.join(data_dir, class_label)     
+        image_files = os.listdir(class_dir) # List of cropped images in the current class directory (e.g. all the images scored '2').
+
+        for image_file in image_files:
+
+            image_path = os.path.join(class_dir, image_file)
+            image = cv.imread(image_path)
+            image = cv.resize(image, (64, 64)) # Preprocessing the cropped images to be the same size (64x64 pixels).
+            
+            images.append(image)
+            labels.append(class_label)
+            test_ids.append(label_idx)
+    return images, labels
+```
+
+
+### Now we have the images loaded into memory, we can split them up and output each set of images as a numpy object.
+
+This function takes as input the images and labels we previously produced, the filepath and model_number (to know where to save the resulting numpy objects), and the training and validation data ratios.
+
+For example, if we wanted to use 60% of the data for training, 20% for validation, and 20% for hold-out test, then we would give train_ratio=0.6 and val_ratio=0.2
+
+In my examples, you will normally see val_ratio=0.0 . The reason for this will be seen in the next script, and is due to something called K-fold cross validation, which involves splitting the training and validation data up later in the process. This means that for now I just keep everything in the training dataset.
+
+```{python}
+def train_val_test(images: List[Any], labels: List[Any], filepath: str, model_number: str,
+                   train_ratio: float = 0.8, val_ratio: float = 0.0) -> None:
+    train_out = os.path.join(filepath, ("train_data" + model_number + ".npy")) # The filepaths to save the final datasets.
+    val_out = os.path.join(filepath, ("val_data" + model_number + ".npy"))
+    test_out = os.path.join(filepath, ("test_data" + model_number + ".npy"))
+
+    if os.path.isfile(test_out):
+        print("The data exists already") # If the dataset already exists don't bother making it again (could change the data which we don't want)
+        return
+
+    total_samples = len(images)
+
+    images, labels = shuffle(images, labels) # Shuffle the order of the images and labels
+
+    train_samples = int(total_samples * train_ratio) # Define the indices to split the data.
+    val_samples = int(total_samples * val_ratio)
+
+    train_images = np.array(images[:train_samples]) # Select the training split
+    train_labels = np.array(labels[:train_samples])
+
+    val_images = np.array(images[train_samples:train_samples + val_samples]) # Select the validation split
+    val_labels = np.array(labels[train_samples:train_samples + val_samples])
+
+    test_images = np.array(images[train_samples + val_samples:]) # Select the test split
+    test_labels = np.array(labels[train_samples + val_samples:])
+
+    def save_dataset(images, labels, file_name): # A sub-function for saving the datasets
+        data = {'images': images, 'labels': labels}
+        np.save(file_name, data, allow_pickle=True)
+
+    save_dataset(train_images, train_labels, train_out) # Run the save_dataset() function on the three data splits.
+    save_dataset(val_images, val_labels, val_out)
+    save_dataset(test_images, test_labels, test_out)
+```
+
+# Now that we've defined our functions, we can implement them
+```{python}
+print("Creating dataset")
+images, labels = load_images_and_labels()
+train_val_test(images, labels, ".", "0015", train_ratio=0.8, val_ratio=0.0)
+```
+</pre>

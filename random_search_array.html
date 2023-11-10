@@ -1,0 +1,454 @@
+<pre>
+---
+title: "Training models with TensorFlow"
+format:
+  html:
+    code-fold: true
+jupyter: python3
+---
+ 
+Date: 03/11/23
+
+## GOHREP
+**Goal:**
+
+Use the hyperparameter sets and image datasets to train a series of deep learning models in TensorFlow
+
+**Hypothesis:**
+
+N/A
+
+**Rationale:**
+
+N/A
+
+**Experimental plan:**
+
+N/A
+
+### Import required libraries
+```{python}
+import datetime
+start_time = datetime.datetime.now()
+
+import tensorflow as tf # The main TensorFlow package
+from sklearn.model_selection import KFold # From scikit-learn, I use this for the K-Fold cross validation.
+import numpy as np
+from tensorflow.keras import layers # These are the layers I will use to define my models using the hyperparameter sets.
+from typing import Any, List, Tuple
+import matplotlib.pyplot as plt # This is an important package for plotting, equivalent to ggplot2.
+from sklearn.metrics import confusion_matrix # I use this to define my confusion matrices (showing my model predictions vs the true values)
+from sklearn.utils import resample # From scikit-learn, contains a useful function for mixing arrays and matrices consistently.
+import pandas as pd
+import os
+from sklearn.utils import shuffle
+import argparse
+```
+
+### Command line arguments
+
+The only argument here is --iteration, which slurm uses to tell this script which hyperparameter CSV to load. For example, if the --iteration value was 10, random_samples10.csv would be loaded. It's essentially the slurm array value, ranging between 1 and --arraylen from before.
+
+```{python}
+parser = argparse.ArgumentParser(add_help=True, formatter_class=argparse.RawDescriptionHelpFormatter, description = "random_search_slurm_array")
+parser.add_argument("-i", "--iteration", help="slurm array iteration value", type=int, default=None)
+args = parser.parse_args()
+iteration = args.iteration
+```
+
+### Helper functions
+
+I call these my helper functions, since they're functions that I load into my script each time and can just use if/when I need.
+
+There's a lot of code here so as a summary for each of these functions:
+
+1. norm_pixels takes as input an image, and scales the values of each pixel to between 0 and 1 (often for images they start off as 0-256, but computers read 0-1 much faster than they do bigger numbers)
+2. undersample_train takes the input dataset, where the class sizes might be very different (e.g. there might be 100 CDAs scored '0' and only 10 scored '1'), and reduces the size of each class down to the smallest class (e.g. '10'). If class sizes are different, machine learning models can become biased towards larger classes.
+3. plot_confusion_matrix plots the confusion matrix for the given model and saves it.
+4. plot_acc_scatter plots the final validation accuracies of each of the folds as well as a horizontal average line.
+5. plot_train_val_acc plots line plots of the training vs validation accuracy at each timepoint in the model training. The lines from each fold are plotted faintly, and the average across the folds is plotted in bold.
+6. load_dataset loads in the numpy objects we created in the previous script.
+
+```{python}
+def norm_pixels(image: np.ndarray, max_val: float = 255.0) -> np.ndarray:
+    return image / max_val
+
+def undersample_train(train_images, train_labels):
+    # Combine train_images and train_labels into a single array
+    train_data = np.column_stack((train_images.reshape(len(train_images), -1), train_labels))
+
+    # Separate the samples by class
+    class_samples = {}
+    for label in np.unique(train_labels):
+        class_samples[label] = train_data[train_data[:, -1] == label]
+
+    # Determine the minimum number of samples in any class
+    min_samples = min(len(samples) for samples in class_samples.values())
+
+    # Undersample the majority classes
+    undersampled_samples = []
+    minority_class = min(class_samples, key=lambda x: len(class_samples[x]))
+    for label, samples in class_samples.items():
+        if label != minority_class:
+            undersampled_samples.append(resample(samples, replace=False, n_samples=min_samples, random_state=42))
+
+    # Combine the undersampled samples
+    undersampled_data = np.concatenate([class_samples[minority_class]] + undersampled_samples)
+
+    # Shuffle the data
+    np.random.shuffle(undersampled_data)
+
+    # Split the data into images and labels
+    height, width, channels = 64, 64, 3
+    undersampled_images = undersampled_data[:, :-1].reshape(len(undersampled_data), height, width, channels)
+    undersampled_labels = undersampled_data[:, -1]
+    
+    return undersampled_images, undersampled_labels
+
+def plot_confusion_matrix_sum(class_labels: list, confusion_matrices: list, model_name: str) -> np.ndarray:
+    # Calculate the sum of confusion matrices
+    num_labels = len(class_labels)
+    confusion_matrix_sum = np.zeros((num_labels, num_labels), dtype=np.int32)
+
+    for obj in confusion_matrices:
+        predicted_values = obj['predicted_values']
+        ground_truth_values = obj['ground_truth_values']
+        confusion_matrix_sum += confusion_matrix(y_true=ground_truth_values, y_pred=predicted_values)
+    
+    # Plot the confusion matrix
+    plt.figure()
+    plt.imshow(confusion_matrix_sum, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title(f'Confusion Matrix: Rank {model_name} model')
+    plt.colorbar()
+    plt.xlabel('Predicted Labels')
+    plt.ylabel('True Labels')
+    filename = model_name + "_confusion_matrix.png"
+    plt.savefig(filename)
+
+    return confusion_matrix_sum
+
+def plot_acc_scatter(model_name, training_cycles, val_final_acc):
+    # Scatter plot of val_final_acc values
+    plt.figure()
+    plt.scatter(range(1, training_cycles+1), val_final_acc)
+    plt.xlabel('Train Cycle')
+    plt.ylabel('Validation Accuracy')
+    plt.title(f'Val acc per fold: Rank {model_name} model')
+    plt.ylim(0, 1)  # Set y-axis limits to 0 and 1
+    avg_val_acc = np.mean(val_final_acc)
+    plt.axhline(avg_val_acc, color='r', linestyle='--', label=f'Average Accuracy: {avg_val_acc:.2f}')
+    plt.legend()
+    filename = model_name + "_scatter_plot.png"
+    plt.savefig(filename)
+
+def plot_train_val_acc(model_name: str, train_accuracies: np.ndarray, epochs: int, val_accuracies: np.ndarray, k: int) -> None:
+    filename = model_name + "_accuracies.png"
+
+    plt.figure()
+
+    # Plot the individual training accuracies per epoch for validation and training for each fold
+    for i in range(k):
+        plt.plot(range(1, epochs+1), train_accuracies[i], color="red", alpha=0.2)
+        plt.plot(range(1, epochs+1), val_accuracies[i], color="green", alpha=0.2)
+
+    # Plot the mean accuracies per epoch for validation and training.
+    plt.plot(range(1, epochs+1), np.mean(train_accuracies, axis=0), label='Train Accuracy', color="red", linewidth=2)
+    plt.plot(range(1, epochs+1), np.mean(val_accuracies, axis=0), label='Validation Accuracy', color="green", linewidth=2)
+
+    # Labels and title
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.title(f'Train/val acc per epoch: Rank {model_name} model')
+    plt.ylim(0, 1)
+    plt.legend()
+    plt.savefig(filename)
+
+def load_dataset(file_name: str) -> Tuple[Any, Any]:
+    data = np.load(file_name, allow_pickle=True)
+    images = data.item().get('images')
+    labels = data.item().get('labels')
+    labels = [float(value) for value in labels]
+    return images, labels
+```
+
+### Use the helper functions to load and preprocess the training data.
+```{python}
+train_images, train_labels = load_dataset("train_data0015.npy") # This train dataset will be split into train and val during KFold cross-validation
+test_images, test_labels = load_dataset("test_data0015.npy")
+
+class_labels = [0, 1, 2, 3, 4, 5, 6]
+
+train_images, test_images = norm_pixels(train_images), norm_pixels(test_images) # Normalize the pixel values
+train_images, train_labels = undersample_train(train_images, train_labels) # Undersample so that the class sizes are the same
+```
+
+# Model building and training functions
+
+This is definitely the most complicated bit so I'll try and explain it as clearly as I can.
+
+On a high-level overview, we have three functions:
+1. kfold_validation defines how the models will be trained
+2. create_model defines the model architecture
+3. build_train_model runs the previous functions with the data from the hyperparameter CSV file.
+
+```{python}
+def kfold_validation(train_images, train_labels, k, class_labels, learning_rate, epochs, num_filters, filter_size, num_layers, pooling_size, activation_function, batch_size, reg, opt, dropout):
+    # This function takes as input the images and labels
+    # All of the other parameters are the hyperparameters which will be loaded from the hyperparameter CSV file.
+
+
+    # These are values I keep track of as the model is training, since they're important for understanding the model performance
+    val_accuracies_fold = [] # The validation and training accuracies for each of the folds in K-fold cross-validation (for plot_acc_scatter)
+    train_accuracies_fold = []
+    val_accuracies_epoch = [] # The validation and training accuracies at each timepoint in each of the folds (for plot_train_val_acc)
+    train_accuracies_epoch = []
+    confusion_matrices = [] # The confusion matrix for each fold (for plot_confusion_matrix_sum)
+
+    kf = KFold(n_splits=k, shuffle=True) # This defines the K-fold design, particularly giving the number of folds (K). I would recommend you look up K-fold cross validation videos on YouTube if you've not come across it before. An example video is: https://www.youtube.com/watch?v=fSytzGwwBVw&ab_channel=StatQuestwithJoshStarmer
+
+
+    # For each fold, we're going to train a model on the training data for that fold, and validate it on the validation data for that fold.
+    for train_index, test_index in kf.split(train_images):
+        model = create_model(num_filters, filter_size, num_layers, pooling_size, activation_function, batch_size, reg, opt, dropout) # Here I'm using my create_model function from below to define the model architecture
+
+        # Split data into train and test sets for the current fold
+        x_train, x_test = train_images[train_index], train_images[test_index]
+        y_train, y_test = train_labels[train_index], train_labels[test_index]
+        y_train_encoded = tf.keras.utils.to_categorical(y_train, len(class_labels))
+        y_test_encoded = tf.keras.utils.to_categorical(y_test, len(class_labels))
+
+        # Compile and train your model
+
+        # This is defining the optimization algorithm, one of the model training hyperparameters.
+        if opt == "Adam":
+            optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        elif opt == "SGD":
+            optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate)
+        elif opt == "Momentum":
+            optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
+        elif opt == "RMSProp":
+            optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
+
+        # This compilation of the model tells TensorFlow how to train the model
+        model.compile(optimizer=optimizer,
+                      loss='categorical_crossentropy',
+                      metrics=['accuracy'])
+
+        # This fit command actually undertakes the training, and will be the bit that takes a long time. I use verbose=0 here otherwise the function prints tens of thousands of lines of text saying "we're at epoch 20 and we're 2/97ths of the way through the data" which clogs the output files.
+        history = model.fit(x_train, y_train_encoded, epochs=epochs, batch_size=batch_size, validation_data=(x_test, y_test_encoded), verbose=0)
+
+        
+        # Store the accuracies per fold for training and validation in a list of integers
+        val_loss_fold, val_accuracy_fold = model.evaluate(x_test, y_test_encoded, verbose=0)
+        val_accuracies_fold.append(val_accuracy_fold)
+        train_loss_fold, train_accuracy_fold = model.evaluate(x_train, y_train_encoded, verbose=0)
+        train_accuracies_fold.append(train_accuracy_fold)
+
+        # Store the accuracies for each epoch of each fold for training and validation in a list of 1D arrays
+        train_accuracies_epoch.append(history.history['accuracy'])
+        val_accuracies_epoch.append(history.history['val_accuracy'])
+
+        # Calculate predictions on the validation set
+        y_pred = model.predict(x_test, verbose=0)
+        y_pred_labels = np.argmax(y_pred, axis=1)
+        y_true_labels = np.argmax(y_test_encoded, axis=1)
+
+        # Generate the confusion matrix for the current fold
+        confusion_matrices.append({'predicted_values': y_pred_labels, 'ground_truth_values': y_true_labels})
+
+    return val_accuracies_fold, train_accuracies_fold, val_accuracies_epoch, train_accuracies_epoch, confusion_matrices, model
+
+def create_model(num_filters, filter_size, num_layers, pooling_size, activation_function, batch_size, reg, opt, dropout):
+    # Regularization
+    if reg == "L1":
+        regularization = tf.keras.regularizers.l1(0.01)
+    elif reg == "L2":
+        regularization = tf.keras.regularizers.l2(0.01)
+    else:
+        regularization = None
+
+    
+    # A sequential model just means that the layers come one after another.
+    model = tf.keras.Sequential()
+    # A convolutional layers are commonly used for image processing.
+    model.add(layers.Conv2D(num_filters, filter_size, activation=activation_function, input_shape=(64, 64, 3), kernel_regularizer=regularization))
+    
+    # Pooling shrinks the size of the input image, so that next time the convolutional kernel of the same size covers more of the image and therefore learns larger features.
+    model.add(layers.MaxPooling2D(pool_size=(pooling_size,pooling_size)))
+
+    # This can be repeated as many times as needed.
+    for layer in range(num_layers-1):
+        model.add(layers.Conv2D(num_filters, filter_size, activation=activation_function, kernel_regularizer=regularization))
+        model.add(layers.MaxPooling2D(pool_size=(pooling_size,pooling_size)))
+
+    # Flattening takes the values from a matrix to a 1D array, which is necessary for converting the representations learned into useful output (e.g. severity scores).
+    model.add(layers.Flatten())
+    
+    # Dropout
+    if dropout > 0:
+        model.add(layers.Dropout(dropout))
+
+    # This final layer has size of len(class_labels), and outputs a value between 0 and 1 for each class (severity score)
+    model.add(layers.Dense(len(class_labels), activation='softmax', kernel_regularizer=regularization))
+    return model
+
+def build_train_model(num_filters, filter_size, learning_rate, epochs, k, num_layers, pooling_size, activation_function, batch_size, reg, opt, dropout):
+    # This function is to convert the model building and training into something that can take input from ParameterGrid
+
+    vaf, taf, vae, tae, cm, model = kfold_validation(train_images, train_labels, k, class_labels, learning_rate, epochs, num_filters, filter_size, num_layers, pooling_size, activation_function, batch_size, reg, opt, dropout)
+
+    return vaf, taf, vae, tae, cm, model
+```
+
+# Perform the random search
+
+Now that we have functions which tell Python how to build and train our model, we can train lots of models using our randomly sampled hyperparameter sets to try and find the best performing model.
+
+```{python}
+total_VAF = [] # Validation accuracy per fold
+total_TAF = [] # Traiing accuracy per fold
+total_VAE = [] # Validation accuracy per epoch
+total_TAE = [] # Training accuracy per epoch
+total_CM = [] # Confusion matrices
+total_Models = [] # Models
+total_Params = [] # Hyperparameter sets
+
+# Load in the CSV containing the hyperparameters for this slurm array index (iteration)
+input_data = pd.read_csv(f"random_samples{iteration}.csv")
+
+# For some reason k is loading as a float -> convert to int (you can ignore this it's a comment for me).
+input_data['k'] = input_data['k'].astype(int)
+
+# Save the hyperparameter values in a dictionary and append them to random_samples so that we can loop through them when training our models.
+random_samples = []
+for index, row in input_data.iterrows():
+    dictionary = {"num_filters": row.num_filters,
+                  "filter_size": row.filter_size,
+                  "learning_rate": row.learning_rate,
+                  "epochs": row.epochs,
+                  "k": row.k,
+                  "num_layers": row.num_layers,
+                  "pooling_size": row.pooling_size,
+                  "activation_function": row.activation_function,
+                  "batch_size": row.batch_size,
+                  "reg": row.reg,
+                  "opt": row.opt,
+                  "dropout": row.dropout}
+    random_samples.append(dictionary)
+
+
+acc_threshold = 0.8 # Target accuracy threshold - if the model goes above this threshold (it probably won't), we've reached our goal and we don't need to keep training more models (computationally expensive)
+for params in random_samples:
+    print("Training with params:", params)
+
+    vaf, taf, vae, tae, cm, model = build_train_model(**params) # Build and train the model with the hyperparameters from the random_samples dictionary
+    total_VAF.append(vaf) # Save all the model training values so that we can make our plots.
+    total_TAF.append(taf)
+    total_VAE.append(vae)
+    total_TAE.append(tae)
+    total_CM.append(cm)
+    total_Models.append(model)
+    total_Params.append(params)
+
+    if np.mean(vaf) >= acc_threshold:
+        break
+```
+
+
+# Output results to CSV
+```{python}
+avg_VAFs = np.mean(total_VAF, axis=1) # The models return an array of values, one for each severity score, but we just want the single prediction.
+avg_TAFs = np.mean(total_TAF, axis=1)
+df = pd.DataFrame(random_samples) # Add the hyperparameter set to the output table.
+df['val_acc'] = avg_VAFs # Add the model validation accuracy to the output table
+divergence = [t - v for t, v in zip(avg_TAFs, avg_VAFs)]
+df['divergence'] = divergence # Add the divergence between the final validation accuracy and the final training accuracy to the output table (an indication of overfitting is when the divergence between these values is high)
+
+df = df.sort_values(by="val_acc", ascending=False) # Reorder them so the highest rank comes first.
+results_path = os.path.join(f"array_task{iteration}", f"random_search_array{iteration}.csv" )
+df.to_csv(results_path, index=False) # Save the output table.
+```
+
+# Display plots of Top 3 models
+
+There's no point looking at all of the model plots, since in 1000 models 950 will be pretty bad. For this reason I just look at the top 3 models.
+
+This function takes the three best performing models and produces the three plots using the Helpers functions defined at the start.
+
+```{python}
+def model_plots(rank, name):
+
+    if name == None:
+        name = str(rank)
+
+    # This just finds the model ranked "rank", e.g. if rank==2 it will give the 2nd best model.
+    avg_VAFs = np.mean(total_VAF, axis=1)
+    ranked_VAFs = np.sort(avg_VAFs)[::-1]
+    value = ranked_VAFs[rank-1]
+
+    position = np.where(avg_VAFs == value)[0][0]
+    
+    vaf = total_VAF[position]
+    taf = total_TAF[position]
+    vae = total_VAE[position]
+    tae = total_TAE[position]
+    cm = total_CM[position]
+    model = total_Models[position]
+    params = total_Params[position]
+
+    #print(f"Model parameters: {params}")
+    #print(f"Model validation accuracy: {avg_VAFs[position]}")
+
+    # Training vs validation accuracy over time
+    plot_train_val_acc(name, tae, params['epochs'], vae, params['k'])
+
+    # Scatter of validation accuracies per fold
+    plot_acc_scatter(name, params['k'], vaf)
+
+    # Confusion matrix
+    confusion_matrix_sum = plot_confusion_matrix_sum(class_labels, cm, name)
+
+    # Per-class validation accuracies - the model may be better at classifying some severity scores than others (in my work the model is good at predicting 0s for example)
+    class_accuracy = np.diag(confusion_matrix_sum) / confusion_matrix_sum.sum(axis=1)
+    print(f"Class accuracies:")
+    for class_acc in range(0, len(class_accuracy)):
+        print(f"Class {class_acc}: {class_accuracy[class_acc]}")
+
+model_plots(1, f"./array_task{iteration}/1_random_search_array")
+model_plots(2, f"./array_task{iteration}/2_random_search_array")
+model_plots(3, f"./array_task{iteration}/3_random_search_array")
+```
+
+
+### Saving model training data
+
+I want to save all this output data incase I need to come back to it later. Most of the data can be stored in DataFrames (like excel tables), but the models we trained have a special format and therefore need to be saved as .h5 files
+
+```{python}
+data = {
+    'total_VAF': total_VAF,
+    'total_TAF': total_TAF,
+    'total_VAE': total_VAE,
+    'total_TAE': total_TAE,
+    'total_CM': total_CM,
+    'total_Params': total_Params
+}
+
+# Save the arrays to a single .npz file
+np.savez(f'./array_task{iteration}/random_search_array_training_data.npz', **data)
+
+# Save each of the models in the Models folder
+model_save_dir = f"./array_task{iteration}/models/"
+
+for i, model in enumerate(total_Models):
+    model_path = os.path.join(model_save_dir, f'model_{i}.h5')
+    model.save(model_path)
+```
+
+### Working out how long the script took to run.
+```{python}
+end_time = datetime.datetime.now()
+execution_time = end_time - start_time
+print(f"Script execution time: {execution_time}")
+```
+</pre>

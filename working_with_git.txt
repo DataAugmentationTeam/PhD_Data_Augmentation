@@ -1,0 +1,20 @@
+The first time you want to host a GitHub repository locally in your documents, you can clone it. You do this by typing 
+"git clone LINK_TO_REPOSITORY". For example for our repository it will be git clone 
+https://github.com/joshuandwilliams/PhD_Data_Augmentation.
+
+To do so you need to have write access to that repository. When we met Friday 10th Nov I worked out how to give you access:
+1. We needed to generate a personal access token in Settings->Developer Settings->Personal Access Tokens->Fine-grained Tokens. You then saved this token in a notes document for later use.
+2. I added you as a collaborator on the repository.
+3. You cloned the repository using git clone https://<username><personal_access_token>@github.com/joshuandwilliams/PhD_Data_Augmentation (replacing <username> and <personal_access_token>). For some 
+reason this only worked when the repository was public.
+
+Now that you're able to access the repository, there are 5 steps to do whenever you have new work you want to upload:
+
+1. Navigate to the cloned repository in your documents using the Terminal.
+2. Enter the command "git pull". This will bring anything new from the repository into your local version.
+3. Enter the command "git add .". This will add any new documents from your side.
+4. Enter the command "git commit -m "<your message about what you did here>". This will stage those added documents for upload.
+5. enter the command "git push origin main". This will upload your committed files to the repository!
+
+As a test, perhaps try creating a new file in your local location and push it to the repository using the 5 steps above.
+

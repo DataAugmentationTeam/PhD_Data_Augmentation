@@ -1,0 +1,8 @@
+This is how I access the cluster:
+
+Enter the command "ssh slurm.nbi.ac.uk". It will prompt you to enter your password - do so and you should be admitted to the cluster.
+
+If you want to access your files on the cluster in the finder window:
+1. Right click on the finder icon (the one with blue left, grey right, smiley face), and click "Connect to Server".
+2. A little box will come up. In the top bar, type "smb://jic-hpc-data", and click "Connect". I'm not sure if tsl has their own it might be tsl-hpc-data?
+3. Select HPC-Home and click "Ok"

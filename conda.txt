@@ -1,0 +1,128 @@
+Last login: Mon Oct 30 14:47:52 on ttys009
+
+The default interactive shell is now zsh.
+To update your account to use zsh, please run `chsh -s /bin/zsh`.
+For more details, please visit https://support.apple.com/kb/HT208050.
+(base) N115527:~ kafayat$ conda
+usage: conda [-h] [--no-plugins] [-V] COMMAND ...
+
+conda is a tool for managing and deploying applications, environments and packages.
+
+options:
+  -h, --help          Show this help message and exit.
+  --no-plugins        Disable all plugins that are not built into conda.
+  -V, --version       Show the conda version number and exit.
+
+commands:
+  The following built-in and plugins subcommands are available.
+
+  COMMAND
+    build             Build conda packages from a conda recipe.
+    clean             Remove unused packages and caches.
+    compare           Compare packages between conda environments.
+    config            Modify configuration values in .condarc.
+    content-trust     Signing and verification tools for Conda
+    convert           Convert pure Python packages to other platforms (a.k.a.,
+                      subdirs).
+    create            Create a new conda environment from a list of specified
+                      packages.
+    debug             Debug the build or test phases of conda recipes.
+    develop           Install a Python package in 'development mode'. Similar
+                      to `pip install --editable`.
+    doctor            Display a health report for your environment.
+    env               See `conda env --help`.
+    index             Update package index metadata files. Pending
+                      deprecation, use https://github.com/conda/conda-index
+                      instead.
+    info              Display information about current conda install.
+    init              Initialize conda for shell interaction.
+    inspect           Tools for inspecting conda packages.
+    install           Install a list of packages into a specified conda
+                      environment.
+    list              List installed packages in a conda environment.
+    metapackage       Specialty tool for generating conda metapackage.
+    notices           Retrieve latest channel notifications.
+    pack              See `conda pack --help`.
+    package           Create low-level conda packages. (EXPERIMENTAL)
+    remove (uninstall)
+                      Remove a list of packages from a specified conda
+                      environment.
+    rename            Rename an existing environment.
+    render            Expand a conda recipe into a platform-specific recipe.
+    repo              See `conda repo --help`.
+    run               Run an executable in a conda environment.
+    search            Search for packages and display associated information
+                      using the MatchSpec format.
+    server            See `conda server --help`.
+    skeleton          Generate boilerplate conda recipes.
+    token             See `conda token --help`.
+    update (upgrade)  Update conda packages to the latest compatible version.
+    verify            See `conda verify --help`.
+(base) N115527:~ kafayat$ conda create --name test_environment
+Collecting package metadata (current_repodata.json): done
+Solving environment: done
+
+
+==> WARNING: A newer version of conda exists. <==
+  current version: 23.7.4
+  latest version: 23.9.0
+
+Please update conda by running
+
+    $ conda update -n base -c defaults conda
+
+Or to minimize the number of packages updated during conda update use
+
+     conda install conda=23.9.0
+
+
+
+## Package Plan ##
+
+  environment location: /Users/kafayat/Downloads/anaconda3/envs/test_environment
+
+
+
+Proceed ([y]/n)? y
+
+Preparing transaction: done
+Verifying transaction: done
+Executing transaction: done
+#
+# To activate this environment, use
+#
+#     $ conda activate test_environment
+#
+# To deactivate an active environment, use
+#
+#     $ conda deactivate
+
+(base) N115527:~ kafayat$ conda activate test_environment
+(test_environment) N115527:~ kafayat$ pip3 install pandas
+Defaulting to user installation because normal site-packages is not writeable
+Collecting pandas
+  Downloading pandas-2.1.2-cp39-cp39-macosx_11_0_arm64.whl (11.0 MB)
+     |████████████████████████████████| 11.0 MB 3.7 MB/s 
+Collecting pytz>=2020.1
+  Downloading pytz-2023.3.post1-py2.py3-none-any.whl (502 kB)
+     |████████████████████████████████| 502 kB 32.0 MB/s 
+Collecting numpy<2,>=1.22.4
+  Downloading numpy-1.26.1-cp39-cp39-macosx_11_0_arm64.whl (14.0 MB)
+     |████████████████████████████████| 14.0 MB 27.4 MB/s 
+Collecting tzdata>=2022.1
+  Downloading tzdata-2023.3-py2.py3-none-any.whl (341 kB)
+     |████████████████████████████████| 341 kB 27.7 MB/s 
+Collecting python-dateutil>=2.8.2
+  Downloading python_dateutil-2.8.2-py2.py3-none-any.whl (247 kB)
+     |████████████████████████████████| 247 kB 9.8 MB/s 
+Requirement already satisfied: six>=1.5 in /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/site-packages (from python-dateutil>=2.8.2->pandas) (1.15.0)
+Installing collected packages: tzdata, pytz, python-dateutil, numpy, pandas
+  WARNING: The script f2py is installed in '/Users/kafayat/Library/Python/3.9/bin' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+Successfully installed numpy-1.26.1 pandas-2.1.2 python-dateutil-2.8.2 pytz-2023.3.post1 tzdata-2023.3
+WARNING: You are using pip version 21.2.4; however, version 23.3.1 is available.
+You should consider upgrading via the '/Library/Developer/CommandLineTools/usr/bin/python3 -m pip install --upgrade pip' command.
+(test_environment) N115527:~ kafayat$ conda deactivate
+(base) N115527:~ kafayat$ echo $PATH
+/Users/kafayat/Downloads/anaconda3/bin:/Users/kafayat/Downloads/anaconda3/condabin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/munki:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin
+(base) N115527:~ kafayat$ 

@@ -1,12 +1,8 @@
-The first time you want to host a GitHub repository locally in your documents, you can clone it. You do this by typing 
-"git clone LINK_TO_REPOSITORY". For example for our repository it will be git clone 
-https://github.com/joshuandwilliams/PhD_Data_Augmentation.
-
-To do so you need to have write access to that repository. When we met Friday 10th Nov I worked out how to give you access:
-1. We needed to generate a personal access token in Settings->Developer Settings->Personal Access Tokens->Fine-grained Tokens. You then saved this token in a notes document for later use.
-2. I added you as a collaborator on the repository.
-3. You cloned the repository using git clone https://<username><personal_access_token>@github.com/joshuandwilliams/PhD_Data_Augmentation (replacing <username> and <personal_access_token>). For some 
-reason this only worked when the repository was public.
+Heres how I configured your git so that you could clone and write to our repository:
+1. We needed to generate a personal access token in Settings->Developer Settings->Personal Access Tokens->Tokens. For the settings just click on "Repo"  You then saved this token in a notes document for later use.
+2. I added you to our organization, DataAugmentationTeam, as an Owner, and I added you to the repository PhD_Data_Augmentation with write access.
+3. On your computer you made sure your credentials were correctly stored using "git config --global user.name <username>" and "git config --global user.email <email>", replacing <username> and <email> with your Github account username and email.
+4. You cloned the repository using git clone https://github.com/DataAugmentationTeam/PhD_Data_Augmentation, giving your username, and when it asks for a password giving the token generated earlier.
 
 Now that you're able to access the repository, there are 5 steps to do whenever you have new work you want to upload:
 

@@ -14,30 +14,28 @@
 USING THIS SCRIPT:
 
 - This is the bash script which runs the machine learning pipeline.
-- There are several things you can change here.
-    a) The number of arrays can be changed in line 7, changing 1-3 to 1-X, where X is your chosen value.
-    b) The number of models to be trained in each array, changing the perfile value below.
-    c) The model number (this is an ID where you can keep track of which you trained), changing model_number below
-    d) The email address to notify when the script is done (you can replace mine with yours)
+- There are two places you can make changes to this script:
+1) The #SBATCH header:
+    a) Change line 9 from my email to yours. When the script errors or finishes running it will email you.
+    b) Change line 7 from 1-3 to 1-X, where X is the number of arrays (scripts run in parallel). e.g. 1-96
+2) The "YOUR CHANGES HERE" section:
+    a) model_number: This is an ID value you should change each time you run a new analysis.
+    b) perfile: This is the number of models which will be trained for each script, and should be 3 or more.
+    c) data_dir: This is the location of the CDA images that the model will use for training and testing.
+    d) img: This is the location of the disk image which will run the scripts.
 
-    To be added by Josh:
-    e) The dataset: currently this has to be changed on line 69 of random_search_array_sample.py
-
-- If you want to run all the hyperparameter combinations from random_search_array_sample.py line 24,
-  you can find the total number of combinations by multiplying the number of options in each class.
-  e.g. 4*2*2*1*1*3*1*1*2*3*4*3 = 3456 models. Since 3456 = 96 * 36, we could therefore run this script
-  with array=1-96, perfile=36, then our script would run 96 times in parallel, with each training 36
-  models.
-
-- I would recommend just increasing the model number by 1 each time you run a new analysis.
+Tip for choosing array and perfile numbers:
+- The number of models that will be trained in total is array*perfile. So if you run 3 arrays and 4 models in each, you will have 12 models.
+- You can do all combinations of the hyperparameter grid in random_search_array_sample.py line 24 by using --array=1-96, perfile=36. 
 
 END_COMMENT
 
-# YOUR CHANGES HERE
+# YOUR CHANGES HERE ----
 model_number="1"
 perfile=3
-
-
+data_dir="../../data/images_combined/"
+img="../tensorflow_model_train.img"
+# ----
 
 
 
@@ -51,7 +49,7 @@ flag_start="flag_start.flag"
 # Check if this is the first task in the array
 if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
     # Randomly sample from the hyperparameter grid, producing CSV files
-    srun singularity exec ../tensorflow_model_train.img python3 random_search_array_sample.py --arraylen ${SLURM_ARRAY_TASK_COUNT} --perfile ${perfile} --model_number "${model_number}"
+    srun singularity exec ${img} python3 random_search_array_sample.py --arraylen ${SLURM_ARRAY_TASK_COUNT} --perfile ${perfile} --model_number "${model_number}" --data_dir "${data_dir}"
 
     # Create a flag file to signal completion
     touch "${flag_start}"
@@ -74,7 +72,7 @@ task_flag="${flag_dir}/flag_${SLURM_ARRAY_TASK_ID}.flag"
 mkdir array_task${SLURM_ARRAY_TASK_ID}
 
 # Run random search on each CSV file, saving output to individual folders
-singularity exec ../tensorflow_model_train.img python3 random_search_array.py --iteration ${SLURM_ARRAY_TASK_ID} --model_number "${model_number}"
+singularity exec ${img} python3 random_search_array.py --iteration ${SLURM_ARRAY_TASK_ID} --model_number "${model_number}"
 
 # Move output, error, and data files to their respective folders
 if [ ${SLURM_ARRAY_TASK_ID} -eq 1 ]; then
@@ -99,5 +97,5 @@ if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
     done
 
     # Combine outputs when all tasks are complete
-    srun singularity exec ../tensorflow_model_train.img python3 random_search_array_combine.py
+    srun singularity exec ${img} python3 random_search_array_combine.py
 fi

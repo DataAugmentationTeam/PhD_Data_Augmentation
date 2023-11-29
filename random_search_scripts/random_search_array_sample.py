@@ -15,8 +15,9 @@ parser = argparse.ArgumentParser(add_help=True, formatter_class=argparse.RawDesc
 parser.add_argument("-a", "--arraylen", help="number of csv files", type=int, default=None)
 parser.add_argument("-p", "--perfile", help="number of sets per csv", type=int, default=None)
 parser.add_argument("-n", "--model_number", help="the number of the model", type=str, default=None)
+parser.ad_arguments("-d", "--data_dir", help="the directory containing the images", type=str, defult=None)
 args = parser.parse_args()
-arraylen, perfile, model_number = args.arraylen, args.perfile, args.model_number
+arraylen, perfile, model_number, data_dir = args.arraylen, args.perfile, args.model_number, args.data_dir
 
 # 96 36 to get all
 
@@ -66,7 +67,6 @@ for df_index, df in enumerate(dfs):
 
 # Create dataset
 def load_images_and_labels() -> Tuple[List[Any], List[int]]:
-    data_dir = "../../data/images_combined/" # Relative path to the folders containing the CDAs
     class_labels = os.listdir(data_dir)
     class_labels = [label for label in class_labels if label != '.DS_Store'] # Remove .DS_Store
 

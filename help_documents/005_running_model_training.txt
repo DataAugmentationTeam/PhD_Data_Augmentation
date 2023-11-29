@@ -1,0 +1,1 @@
+Now that the singularity container has been built, we can use it to run the machine learning training scripts.

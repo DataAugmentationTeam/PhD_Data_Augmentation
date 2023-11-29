@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(add_help=True, formatter_class=argparse.RawDesc
 parser.add_argument("-a", "--arraylen", help="number of csv files", type=int, default=None)
 parser.add_argument("-p", "--perfile", help="number of sets per csv", type=int, default=None)
 parser.add_argument("-n", "--model_number", help="the number of the model", type=str, default=None)
-parser.ad_arguments("-d", "--data_dir", help="the directory containing the images", type=str, defult=None)
+parser.add_argument("-d", "--data_dir", help="the directory containing the images", type=str, default=None)
 args = parser.parse_args()
 arraylen, perfile, model_number, data_dir = args.arraylen, args.perfile, args.model_number, args.data_dir
 
@@ -50,7 +50,7 @@ for csv in range(arraylen):
     random_samples = []
     for sample in range(perfile): # Change this to 100 once testing over
         random_sample = grid.pop()
-        print(len(grid))
+        #print(len(grid))
         random_samples.append(random_sample)
     output_df = pd.DataFrame(random_samples)
     lengths.append(output_df.shape[0])

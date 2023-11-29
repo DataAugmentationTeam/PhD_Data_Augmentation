@@ -28,6 +28,8 @@ Tip for choosing array and perfile numbers:
 - The number of models that will be trained in total is array*perfile. So if you run 3 arrays and 4 models in each, you will have 12 models.
 - You can do all combinations of the hyperparameter grid in random_search_array_sample.py line 24 by using --array=1-96, perfile=36. 
 
+If you don't yet have an image, please work through the file building_singularity_container.txt
+
 END_COMMENT
 
 # YOUR CHANGES HERE ----

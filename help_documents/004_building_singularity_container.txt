@@ -1,0 +1,2 @@
+In order to run my scripts on the cluster, we need to build a singularity container (like a conda container).
+This will allow us to install Python packages like TensorFlow on the cluster.

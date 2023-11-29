@@ -66,7 +66,7 @@ fi
 # STEP 2: MODEL TRAINING
 
 # Raise a flag for each array once the model training is complete
-flagdir="flags"
+flag_dir="flags"
 mkdir -p "${flag_dir}"
 task_flag="${flag_dir}/flag_${SLURM_ARRAY_TASK_ID}.flag"
 

@@ -16,7 +16,7 @@ parser.add_argument("-a", "--arraylen", help="number of csv files", type=int, de
 parser.add_argument("-p", "--perfile", help="number of sets per csv", type=int, default=None)
 parser.add_argument("-n", "--model_number", help="the number of the model", type=str, default=None)
 args = parser.parse_args()
-arraylen, perfile, model_number = args.arraylen, args.perfile, "00" + args.model_number
+arraylen, perfile, model_number = args.arraylen, args.perfile, args.model_number
 
 # 96 36 to get all
 

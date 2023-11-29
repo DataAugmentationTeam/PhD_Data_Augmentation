@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(add_help=True, formatter_class=argparse.RawDesc
 parser.add_argument("-i", "--iteration", help="slurm array iteration value", type=int, default=None)
 parser.add_argument("-n", "--model_number", help="the number of the model", type=str, default=None)
 args = parser.parse_args()
-iteration, model_number = args.iteration, "00" + args.model_number
+iteration, model_number = args.iteration, args.model_number
 
 # Helper functions
 def norm_pixels(image: np.ndarray, max_val: float = 255.0) -> np.ndarray:

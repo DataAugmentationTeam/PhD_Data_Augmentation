@@ -8,8 +8,40 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jowillia@nbi.ac.uk
 
-model_number="99"
 
+: <<'END_COMMENT'
+
+USING THIS SCRIPT:
+
+- This is the bash script which runs the machine learning pipeline.
+- There are several things you can change here.
+    a) The number of arrays can be changed in line 7, changing 1-3 to 1-X, where X is your chosen value.
+    b) The number of models to be trained in each array, changing the perfile value below.
+    c) The model number (this is an ID where you can keep track of which you trained), changing model_number below
+    d) The email address to notify when the script is done (you can replace mine with yours)
+
+    To be added by Josh:
+    e) The dataset: currently this has to be changed on line 69 of random_search_array_sample.py
+
+- If you want to run all the hyperparameter combinations from random_search_array_sample.py line 24,
+  you can find the total number of combinations by multiplying the number of options in each class.
+  e.g. 4*2*2*1*1*3*1*1*2*3*4*3 = 3456 models. Since 3456 = 96 * 36, we could therefore run this script
+  with array=1-96, perfile=36, then our script would run 96 times in parallel, with each training 36
+  models.
+
+- I would recommend just increasing the model number by 1 each time you run a new analysis.
+
+END_COMMENT
+
+# YOUR CHANGES HERE
+model_number="1"
+perfile=3
+
+
+
+
+
+model_number=$(printf "%04d" $model_number)
 
 # STEP 1: DATASET CREATION AND TRAINING HYPERPARAMETER SAMPLING
 
@@ -19,7 +51,7 @@ flag_start="flag_start.flag"
 # Check if this is the first task in the array
 if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
     # Randomly sample from the hyperparameter grid, producing CSV files
-    srun singularity exec ../tensorflow_model_train.img python3 random_search_array_sample.py --arraylen ${SLURM_ARRAY_TASK_COUNT} --perfile 3 --model_number "${model_number}"
+    srun singularity exec ../tensorflow_model_train.img python3 random_search_array_sample.py --arraylen ${SLURM_ARRAY_TASK_COUNT} --perfile ${perfile} --model_number "${model_number}"
 
     # Create a flag file to signal completion
     touch "${flag_start}"

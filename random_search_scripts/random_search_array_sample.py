@@ -1,5 +1,3 @@
-# 12/09/23
-
 # Import required libraries
 import numpy as np
 import pandas as pd
@@ -16,25 +14,26 @@ parser.add_argument("-a", "--arraylen", help="number of csv files", type=int, de
 parser.add_argument("-p", "--perfile", help="number of sets per csv", type=int, default=None)
 parser.add_argument("-n", "--model_number", help="the number of the model", type=str, default=None)
 parser.add_argument("-d", "--data_dir", help="the directory containing the images", type=str, default=None)
+parser.add_argument("-s", "--image_size", help="the size to rescale the images to", type=int, default=64)
+parser.add_argument("-t", "--train", help="percentage of dataset used for training", type=int, default=60)
+parser.add_argument("-v", "--val", help="percentage of dataset used for validation", type=int, default=20)
 args = parser.parse_args()
-arraylen, perfile, model_number, data_dir = args.arraylen, args.perfile, args.model_number, args.data_dir
+arraylen, perfile, model_number, data_dir, image_size = args.arraylen, args.perfile, args.model_number, args.data_dir, args.image_size
+train_split, val_split = args.train, args.val
 
-# 96 36 to get all
+# 96 4 to get all
 
 # Parameter grid to sample from
 param_grid = {
-    'num_filters': [2, 4, 8, 16],
-    'filter_size': [3, 5],
-    'learning_rate': [0.001, 0.0001],
+    'layer_size': [4, 8, 16, 32],
+    'learning_rate': [0.01, 0.001, 0.0001, 0.00001],
     'epochs': [50],
     'k': [5],
-    'num_layers': [1, 2, 3],
-    'pooling_size': [2],
+    'num_layers': [1, 2, 3, 4],
     'activation_function': ['relu'],
-    'batch_size': [64, 128],
-    'reg': [None, "L1", "L2"],
-    'opt': ["Adam", "SGD", "Momentum", "RMSProp"],
-    'dropout': [0, 0.2, 0.5]
+    'batch_size': [64],
+    'opt': ["Adam", "Momentum", "RMSProp"],
+    'doubling': [True, False]
 }
 
 
@@ -82,7 +81,7 @@ def load_images_and_labels() -> Tuple[List[Any], List[int]]:
 
             image_path = os.path.join(class_dir, image_file)
             image = cv.imread(image_path)
-            image = cv.resize(image, (64, 64)) # Preprocessing the cropped images to be the same size.
+            image = cv.resize(image, (image_size, image_size)) # Preprocessing the cropped images to be the same size.
             
             images.append(image)
             labels.append(class_label)
@@ -98,6 +97,8 @@ def train_val_test(images: List[Any], labels: List[Any], filepath: str, model_nu
     if os.path.isfile(test_out):
         print("The data exists already")
         return
+    
+    print("Creating dataset")
 
     total_samples = len(images)
 
@@ -123,7 +124,6 @@ def train_val_test(images: List[Any], labels: List[Any], filepath: str, model_nu
     save_dataset(val_images, val_labels, val_out)
     save_dataset(test_images, test_labels, test_out)
 
-# Load in data, normalize, and split into train:val:test
-print("Creating dataset")
+# Load in data, and split into train:val:test
 images, labels = load_images_and_labels()
-train_val_test(images, labels, ".", model_number, train_ratio=0.8, val_ratio=0.0) # Consider changing this ratio when considering the undersampling
+train_val_test(images, labels, ".", model_number, train_ratio=train_split, val_ratio=val_split) # Consider changing this ratio when considering the undersampling

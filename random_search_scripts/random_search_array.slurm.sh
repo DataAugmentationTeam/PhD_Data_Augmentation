@@ -37,6 +37,9 @@ model_number="1"
 perfile=3
 data_dir="../../data/images_combined/"
 img="../tensorflow_model_train.img"
+img_size=224
+train=60
+val=20
 # ----
 
 
@@ -51,7 +54,7 @@ flag_start="flag_start.flag"
 # Check if this is the first task in the array
 if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
     # Randomly sample from the hyperparameter grid, producing CSV files
-    srun singularity exec ${img} python3 random_search_array_sample.py --arraylen ${SLURM_ARRAY_TASK_COUNT} --perfile ${perfile} --model_number "${model_number}" --data_dir "${data_dir}"
+    srun singularity exec ${img} python3 random_search_array_sample.py --arraylen ${SLURM_ARRAY_TASK_COUNT} --perfile ${perfile} --model_number "${model_number}" --data_dir "${data_dir}" --image_size ${img_size} --train ${train} --val ${val}
 
     # Create a flag file to signal completion
     touch "${flag_start}"
@@ -74,7 +77,7 @@ task_flag="${flag_dir}/flag_${SLURM_ARRAY_TASK_ID}.flag"
 mkdir array_task${SLURM_ARRAY_TASK_ID}
 
 # Run random search on each CSV file, saving output to individual folders
-singularity exec ${img} python3 random_search_array.py --iteration ${SLURM_ARRAY_TASK_ID} --model_number "${model_number}"
+singularity exec ${img} python3 random_search_array.py --iteration ${SLURM_ARRAY_TASK_ID} --model_number "${model_number}" --image_size ${img_size}
 
 # Move output, error, and data files to their respective folders
 if [ ${SLURM_ARRAY_TASK_ID} -eq 1 ]; then

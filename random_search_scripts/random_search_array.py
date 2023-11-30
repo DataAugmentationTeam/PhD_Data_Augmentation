@@ -1,5 +1,3 @@
-# 12/09/23
-
 # Import required libraries
 import datetime
 start_time = datetime.datetime.now()
@@ -21,8 +19,9 @@ import argparse
 parser = argparse.ArgumentParser(add_help=True, formatter_class=argparse.RawDescriptionHelpFormatter, description = "random_search_slurm_array")
 parser.add_argument("-i", "--iteration", help="slurm array iteration value", type=int, default=None)
 parser.add_argument("-n", "--model_number", help="the number of the model", type=str, default=None)
+parser.add_argument("-s", "--image_size", help="the size to rescale the images to", type=int, default=64)
 args = parser.parse_args()
-iteration, model_number = args.iteration, args.model_number
+iteration, model_number, img_size = args.iteration, args.model_number, args.image_size
 
 # Helper functions
 def norm_pixels(image: np.ndarray, max_val: float = 255.0) -> np.ndarray:
@@ -54,7 +53,7 @@ def undersample_train(train_images, train_labels):
     np.random.shuffle(undersampled_data)
 
     # Split the data into images and labels
-    height, width, channels = 64, 64, 3
+    height, width, channels = img_size, img_size, 3
     undersampled_images = undersampled_data[:, :-1].reshape(len(undersampled_data), height, width, channels)
     undersampled_labels = undersampled_data[:, -1]
     
@@ -131,7 +130,8 @@ def load_dataset(file_name: str) -> Tuple[Any, Any]:
 train_images, train_labels = load_dataset("train_data" + model_number + ".npy") # This train dataset will be split into train and val during KFold cross-validation
 test_images, test_labels = load_dataset("test_data" + model_number + ".npy")
 
-class_labels = [0, 1, 2, 3, 4, 5, 6]
+unique_labels = set(train_labels)
+class_labels = list(unique_labels)
 
 train_images, test_images = norm_pixels(train_images), norm_pixels(test_images) # Normalize the pixel values
 train_images, train_labels = undersample_train(train_images, train_labels) # Undersample so that the class sizes are the same
@@ -202,7 +202,7 @@ def create_model(num_filters, filter_size, num_layers, pooling_size, activation_
         regularization = None
     
     model = tf.keras.Sequential()
-    model.add(layers.Conv2D(num_filters, filter_size, activation=activation_function, input_shape=(64, 64, 3), kernel_regularizer=regularization))
+    model.add(layers.Conv2D(num_filters, filter_size, activation=activation_function, input_shape=(img_size, img_size, 3), kernel_regularizer=regularization))
     model.add(layers.MaxPooling2D(pool_size=(pooling_size,pooling_size)))
     for layer in range(num_layers-1):
         model.add(layers.Conv2D(num_filters, filter_size, activation=activation_function, kernel_regularizer=regularization))
@@ -254,7 +254,6 @@ for index, row in input_data.iterrows():
                   "dropout": row.dropout}
     random_samples.append(dictionary)
 
-acc_threshold = 0.8 # Target accuracy threshold
 for params in random_samples:
     print("Training with params:", params)
 
@@ -266,9 +265,6 @@ for params in random_samples:
     total_CM.append(cm)
     total_Models.append(model)
     total_Params.append(params)
-
-    if np.mean(vaf) >= acc_threshold:
-        break
 
 # Output results to CSV
 avg_VAFs = np.mean(total_VAF, axis=1)
